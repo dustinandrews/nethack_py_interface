@@ -1,16 +1,22 @@
+################
+# Nethack python interface assumes certain config options 
+# and Nethack is NAO Version 3.4.3
 #
-# Nethack Python Interface RC file
-# Library assumes these settings 
+# Vital options:
+# OPTIONS=vt_tiledata
+# OPTIONS=number_pad:1
 #
+# Planned option:
+# OPTIONS=mouse_support
+#
+# Note: Options that only affect colors don't make a difference
+################
 
 # Compound options
 OPTIONS=role:Val
 OPTIONS=race:D
-#OPTIONS=align:neutralOP
-#OPTIONS=gender:male
 OPTIONS=pettype:none
 OPTIONS=autopickup
-#OPTIONS=pickup_types:all
 # cash, amulets, scrolls, spellbooks, potions, rings, wands
 #* # NOT gems/rocks
 OPTIONS=pickup_types:$"?+!=/
@@ -21,26 +27,12 @@ OPTIONS=checkpoint
 OPTIONS=nocmdassist
 OPTIONS=color
 OPTIONS=confirm
-#OPTIONS=DECgraphics
-#OPTIONS=noeight_bit_tty
-#OPTIONS=extmenu
 OPTIONS=fixinv
 OPTIONS=hp_monitor
 OPTIONS=hilite_pet
-#OPTIONS=noignintr
-#OPTIONS=lit_corridor
-#OPTIONS=lootabc
-#OPTIONS=mail
-#OPTIONS=null
-#OPTIONS=noparanoid_hit
-#OPTIONS=noparanoid_quit
-#OPTIONS=paranoid_remove
-#OPTIONS=prayconfirm
 OPTIONS=pushweapon
 OPTIONS=norest_on_space
 OPTIONS=safe_pet
-#OPTIONS=showborn
-#OPTIONS=noshowbuc
 OPTIONS=showexp
 OPTIONS=showrace
 OPTIONS=showscore
@@ -50,8 +42,6 @@ OPTIONS=nosparkle
 OPTIONS=nostandout
 OPTIONS=time
 OPTIONS=travel
-#OPTIONS=use_darkgray
-#OPTIONS=nouse_inverse
 OPTIONS=verbose
 #OPTIONS=win_edge
 # Compound options
@@ -62,7 +52,7 @@ OPTIONS=fruit:banana
 OPTIONS=menustyle:full
 OPTIONS=menu_headings:inverse
 OPTIONS=msg_window:reversed
-OPTIONS=number_pad:0
+OPTIONS=number_pad:1
 OPTIONS=runmode:teleport
 OPTIONS=sortloot:full
 OPTIONS=suppress_alert:3.4.3

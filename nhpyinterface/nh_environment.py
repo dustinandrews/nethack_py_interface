@@ -9,13 +9,16 @@ Top level library to abstract Nethack for bots that follows AIGym conventions
 
 from nh_interface import NhClient
 from nhstate import NhState
+from collections import namedtuple
+import numpy as np
 
+Aspace = namedtuple("action_space", "n")
 
 class NhEnv():
     """
     More or less replicate an AI Gym environment for connecting to a NN.
     """
-
+    action_space = Aspace(9)
     is_done = False
     _action_rating = 1
     strategies = {
@@ -28,6 +31,8 @@ class NhEnv():
         self.actions = self.nhc.nhdata.get_commands(1)
         self.num_actions = len(self.actions)
         self.nhstate = NhState(self.nhc)
+        self.nhc.send_string('\n')
+        self.nhc.start_session()
 
     def __del__(self):
         self.nhc.close()
@@ -36,18 +41,12 @@ class NhEnv():
         """
         Start a new game
         """
-        self.nhc.start_session()
         self.nhc.reset_game()
         self.nhc.start_session()
         return self.data()
 
-    def connect(self):
-        """
-        Connect to existing game
-        """
-        self.nhc.start_session()
 
-    def step(self, action: int, strategy: int):
+    def step(self, action: int, strategy: int = 0):
         if self.is_done:
             raise ValueError("Simulation ended and must be reset")
         last_status = self.nhc.get_status()
@@ -60,9 +59,11 @@ class NhEnv():
         self.is_done = self.nhstate.check_game_state()
 
         #s_, r, t, info
-        s_, info = self.data()
+        s_, info = self.data(), self.nhc.get_status()
         t = self.is_done
         r = self.score_move(last_status, last_screen)
+
+        print(info['t'], end=", ")
         return s_, r, t, info
 
     def score_move(self, last_status, last_screen):
@@ -72,14 +73,20 @@ class NhEnv():
         explore = len(screen_diff[screen_diff != 0])
         score = explore - 1 # Offset score turn and punish no-ops like wall bumps
         for key in new_status:
-            if last_status[key] < new_status[key]:
-                score += 1
+            if key in last_status.keys():
+                if last_status[key] < new_status[key]:
+                    score += 1
         return score
 
+    def auxiliary_features(self):
+        return np.array(list(self.nhc.get_status().values()), dtype=np.float32)
 
     def _do_direct_action(self, action):
         if action >= self.num_actions:
             raise ValueError('No such action {}, limit is {}'.format(action, self.num_actions-1))
+        if action not in self.nhc.nhdata.MOVE_COMMANDS:
+            # No op
+            return
         self.nhc.send_command(action)
 
     def _do_exploration_move(self, action):
@@ -90,19 +97,16 @@ class NhEnv():
            self.nhc.send_string("G")
            self.nhc.send_string(str(action))
 
-
     def data(self):
-        output = []
-        output.append(self.nhc.buffer_to_rgb())
-        output.append(self.nhc.get_status())
-        return(output)
+        return self.nhc.buffer_to_rgb()
+
+    def close(self):
+        self.nhc.close()
 
 if __name__ == '__main__':
-    import numpy as np
     from matplotlib import pyplot as plt
 
     nhe = NhEnv()
-    data = nhe.connect()
     print("\n".join(nhe.nhc.screen.display))
 
 

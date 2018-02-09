@@ -24,7 +24,15 @@ class NhState:
         returns True if game over.
         """
         done = False
+        safety = 0
+        threshold = 10
         while not done and (self.nhc.is_special_prompt):
+            if safety > threshold:
+                attribs = dir(self.nhc)
+                for at in [a for a in attribs if 'is_' in a]:
+                    print('{}: {}'.format(at, getattr(self.nhc, at)))
+                raise ValueError("Unexpectedly looping")
+
             if self.nhc.is_always_no_question:
                 self.nhc.send_string('n\n')
             if self.nhc.is_killed:
@@ -38,7 +46,8 @@ class NhState:
                 self.nhc.send_string('\n')
             else:
                 self.nhc.send_string(' ')
-            self._save_progress
+            self._save_progress()
+            safety += 1
 
         return done
 
@@ -48,7 +57,8 @@ class NhState:
         Potentially check on inventory.
         """
         if self.nhc.is_killed:
-            print(self.nhc.screen.display)
+            print()
+            print("\n".join(self.nhc.screen.display))
 
 
     def _save_progress(self):

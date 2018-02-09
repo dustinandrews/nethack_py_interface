@@ -10,6 +10,8 @@ import re
 from monsters import Monsters
 from objects import Objects
 from rooms import RoomTiles
+import os
+import sys
 
 class NhData():
     """
@@ -95,6 +97,9 @@ class NhData():
     #####
 
     glyph_pickle_file = "glyphs.pkl"
+    local_dir = os.path.abspath(os.path.dirname(__file__))
+    glyph_pickle_file = os.path.join(local_dir, glyph_pickle_file)
+
 
     def __init__(self):
         with open(self.glyph_pickle_file, 'rb') as glyph_file:
@@ -106,7 +111,7 @@ class NhData():
 
 
     def get_status(self, lines):
-        return_dict = {}
+        return_dict = {'t':0, 'dlvl': -1}
         lines.reverse()
         found = 0
         for line in lines:

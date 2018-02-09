@@ -4,7 +4,7 @@ Created on Mon Jan  8 17:00:26 2018
 
 @author: dandrews
 
-With help from the lmj nethack client https://github.com/lmjohns3/shrieker
+With inspiration from the lmj nethack client https://github.com/lmjohns3/shrieker
 """
 
 from pyte import Screen, ByteStream
@@ -14,6 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from nhdata import NhData
 import collections
+import os
 
 class Point:
     __slots__ = ['x', 'y']
@@ -28,7 +29,6 @@ class NhClient:
     Uses telnet to connect to Nethack and communicate on a basic level with
     it. Note to self: Do not put game logic here. This is a low level interface.
     """
-
 
     game_address = 'localhost'
     game_port = 23
@@ -47,14 +47,20 @@ class NhClient:
     tn = None
     _more_prompt = b'ore--\x1b[27m\x1b[3z'
     is_always_yes_question = False
+    is_always_no_question  = False
     is_killed              = False
     is_end                 = False
     is_stale               = False
     is_more                = False
     is_killed_something    = False
-    is_always_no_question  = False
     is_special_prompt      = False
+    is_game_screen         = False
     is_blank               = False
+    is_count               = False
+    is_dgamelaunch         = False
+    is_dg_logged_in        = False
+
+    _special_prompts = ['end', 'more', 'question', 'count']
 
 
     _states = { 'always_yes_question': ['Force its termination? [yn]'],
@@ -64,35 +70,44 @@ class NhClient:
         'more':['--More--'],
         'killed_something':['You kill'],
         'always_no_question':['Still climb?' , 're you sure?'],
-        'dgamelaunch':['dgamelaunch']
+        'dgamelaunch':['dgamelaunch'],
+        'count':['Count: '],
+        'dg_logged_in':['Logged in as'],
+        'game_screen':['Dlvl:']
         }
 
 
+    sprite_sheet_name = "sprite_sheets/chozo32.bmp"
+    local_dir = os.path.abspath(os.path.dirname(__file__))
+    sprite_sheet_name = os.path.join(local_dir, sprite_sheet_name)
 
     def __init__(self, username='aa'):
         self.username = username
-        self.sprite_sheet = SpriteSheet("sprite_sheets/chozo32.bmp", 40, 30)
+        self.sprite_sheet = SpriteSheet(self.sprite_sheet_name, 40, 30)
         self._init_screen()
+        self.tn = telnetlib.Telnet(self.game_address)
         self._set_states()
-        #self.start_session()
 
     def __del__(self):
          self.close()
 
     def start_session(self):
-        self._init_screen()
-        self.tn = telnetlib.Telnet(self.game_address)
-        prompt = b'=>'
-        self.tn.read_until(prompt,2)
-        self.send_and_read_to_prompt(prompt, b'l')
-        message = self.username.encode(self.encoding) + b'\n'
-        self.send_and_read_to_prompt(prompt, message)
-        self.send_and_read_to_prompt(prompt, message)
-        self.send_and_read_to_prompt(prompt, b'p') # play
+        print('start session')
+        if not self.is_dgamelaunch:
+            print('Not in dgamelaunch menu')
+            return
 
-        page = self.history[-1]
+        prompt = b'=>'
+        if not self.is_dg_logged_in:
+            self.tn.read_until(prompt,2)
+            self.send_and_read_to_prompt(prompt, b'l')
+            message = self.username.encode(self.encoding) + b'\n'
+            self.send_and_read_to_prompt(prompt, message, debug_print=True)
+            self.send_and_read_to_prompt(prompt, message, debug_print=True)
+        self.send_and_read_to_prompt(prompt, b'p', debug_print=True) # play
 
         # Important not to send anything while stale processes are being killed
+        # Ideally won't end up in this loop much outside of testing.
         while self.is_stale:
             print("stale")
             data = self.tn.read_until(b'seconds.', 1)
@@ -104,14 +119,14 @@ class NhClient:
 
         while self.is_more or self.is_blank:
             self.send_and_read_to_prompt(self._more_prompt, b'\n')
-        #[print(line) for line in self.history]
 
     def reset_game(self):
-        self.send_and_read_to_prompt(b'[yes/no]?', b'#quit\n')
-        self.send_and_read_to_prompt(b'(end)', b'yes\n')
-        while self.is_end or self.is_more:
-            self.send_and_read_to_prompt(self._more_prompt, b' ')
-        self.close()
+        print('reset')
+        if self.is_game_screen:
+            self.send_and_read_to_prompt(b'[yes/no]?', b'#quit\n', debug_print=True)
+            self.send_and_read_to_prompt(b'(end)', b'yes\n', debug_print=True)
+            while self.is_end or self.is_more:
+                self.send_and_read_to_prompt(self._more_prompt, b' ', debug_print=True)
 
     def render_glyphs(self):
         """
@@ -131,17 +146,25 @@ class NhClient:
                     screen[row*32:(row*32)+32,col*32:(col*32)+32,:] = tile
         return screen
 
-    def send_and_read_to_prompt(self, prompt, message, timeout=2):
+    def send_and_read_to_prompt(self, prompt, message, timeout=2, debug_print = False):
         if type(prompt) == str:
             prompt = prompt.encode('ascii')
 
         if type(message) == str:
             message = message.encode('ascii')
 
-        self.tn.write(message)
-        #print(prompt, message)
-        data = self.tn.read_until(prompt, timeout)
-        data += self.tn.read_very_eager()
+        try:
+            self.tn.write(message)
+            #print(prompt, message)
+            data = self.tn.read_until(prompt, timeout)
+            data += self.tn.read_very_eager()
+        except EOFError:
+            print("Telnet connection lost, reconnecting")
+            self.start_session()
+        if debug_print:
+            print("\n".join(self.screen.display))
+
+
         self.data_history.append(data)
         self.command_history.append(message)
         screen = self.render_data(data)
@@ -149,13 +172,13 @@ class NhClient:
         self._set_states()
         return data
 
-
     def close(self):
         print("closing")
         if self.tn:
             self.send_string('S')
             self.send_string('y\n')
             self.tn.close()
+            self.tn = None
 
     def _init_screen(self):
         self.byte_stream = ByteStream()
@@ -231,8 +254,9 @@ class NhClient:
             for string in self._states[s]:
                 if string in page:
                     setattr(self, "is_" + s, True)
-                    if 'killed_something' != s:
-                        self.is_special_prompt =True
+                    for sp in self._special_prompts:
+                        if sp in s:
+                            self.is_special_prompt = True
 
         self.is_blank = True
         for c in page:
@@ -263,7 +287,6 @@ class NhClient:
                 visible.append([mob, npdata[mob[0],mob[1]]])
         return visible
 
-    # TODO: Move this to nhstate?
     def get_status(self):
         return self.nhdata.get_status(self.screen.display)
 
