@@ -37,6 +37,7 @@ class NhClient:
     encoding = 'ascii'
     history = []
     data_history = []
+    command_history = []
     wb_message = b'welcome back to NetHack!'
     MAX_GLYPH = 1012
     map_x_y = MapXY(21,80)
@@ -142,6 +143,7 @@ class NhClient:
         data = self.tn.read_until(prompt, timeout)
         data += self.tn.read_very_eager()
         self.data_history.append(data)
+        self.command_history.append(message)
         screen = self.render_data(data)
         self.history.append(screen)
         self._set_states()
