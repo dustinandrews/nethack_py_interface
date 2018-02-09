@@ -7,7 +7,7 @@ Created on Fri Jan 19 15:30:17 2018
 Top level library to abstract Nethack for bots that follows AIGym conventions
 """
 
-from NhInterface import NhClient
+from nh_interface import NhClient
 from nhstate import NhState
 
 

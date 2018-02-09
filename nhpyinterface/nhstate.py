@@ -5,7 +5,7 @@ Created on Tue Feb  6 17:39:19 2018
 @author: dandrews
 """
 
-from NhInterface import NhClient
+from nh_interface import NhClient
 import pickle
 
 class NhState:
