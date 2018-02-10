@@ -45,9 +45,12 @@ class NhState:
                 self.nhc.send_string('n')
                 self.nhc.send_string('\n')
             else:
-                self.nhc.send_string(' ')
+                self.nhc.send_string('\n')
             self._save_progress()
-            safety += 1
+
+            # When fainted there can be a lot of messages to clear.
+            if not self.nhc.is_fainted:
+                safety += 1
 
         return done
 

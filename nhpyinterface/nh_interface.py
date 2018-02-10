@@ -59,6 +59,7 @@ class NhClient:
     is_count               = False
     is_dgamelaunch         = False
     is_dg_logged_in        = False
+    is_fainted             = False
 
     _special_prompts = ['end', 'more', 'question', 'count']
 
@@ -73,7 +74,8 @@ class NhClient:
         'dgamelaunch':['dgamelaunch'],
         'count':['Count: '],
         'dg_logged_in':['Logged in as'],
-        'game_screen':['Dlvl:']
+        'game_screen':['Dlvl:'],
+        'fainted':['Fainted']
         }
 
 
@@ -86,17 +88,21 @@ class NhClient:
         self.sprite_sheet = SpriteSheet(self.sprite_sheet_name, 40, 30)
         self._init_screen()
         self.tn = telnetlib.Telnet(self.game_address)
-        self._set_states()
+        self._read_states()
 
     def __del__(self):
          self.close()
 
     def start_session(self):
         print('start session')
+        if not self.tn:
+            self.tn = telnetlib.Telnet(self.game_address)
+
+
+        self._clear_more()
         if not self.is_dgamelaunch:
             print('Not in dgamelaunch menu')
             return
-
         prompt = b'=>'
         if not self.is_dg_logged_in:
             self.tn.read_until(prompt,2)
@@ -105,6 +111,7 @@ class NhClient:
             self.send_and_read_to_prompt(prompt, message, debug_print=True)
             self.send_and_read_to_prompt(prompt, message, debug_print=True)
         self.send_and_read_to_prompt(prompt, b'p', debug_print=True) # play
+        self._clear_more()
 
         # Important not to send anything while stale processes are being killed
         # Ideally won't end up in this loop much outside of testing.
@@ -113,20 +120,33 @@ class NhClient:
             data = self.tn.read_until(b'seconds.', 1)
             page = self.render_data(data)
             self.history.append(page)
-            self._set_states()
-
+            self._read_states()
         self.tn.read_until(self._more_prompt, 2)
-
-        while self.is_more or self.is_blank:
-            self.send_and_read_to_prompt(self._more_prompt, b'\n')
+        self._clear_more()
 
     def reset_game(self):
         print('reset')
-        if self.is_game_screen:
+
+        if not self.tn:
+            self.tn = telnetlib.Telnet(self.game_address)
+            self._read_states()
+
+        self._clear_more()
+        if self.is_dgamelaunch:
+            self.start_session()
+
+        t = self.nhdata.get_status(self.screen.display)['t']
+        if self.is_game_screen and t != 1:
             self.send_and_read_to_prompt(b'[yes/no]?', b'#quit\n', debug_print=True)
             self.send_and_read_to_prompt(b'(end)', b'yes\n', debug_print=True)
-            while self.is_end or self.is_more:
-                self.send_and_read_to_prompt(self._more_prompt, b' ', debug_print=True)
+            self._clear_more()
+            self.start_session()
+
+
+    def _clear_more(self):
+        self._read_states()
+        while self.is_end or self.is_more or self.is_blank:
+            self.send_and_read_to_prompt(self._more_prompt, b'\n', debug_print=True)
 
     def render_glyphs(self):
         """
@@ -160,7 +180,9 @@ class NhClient:
             data += self.tn.read_very_eager()
         except EOFError:
             print("Telnet connection lost, reconnecting")
+            self.tn = None
             self.start_session()
+
         if debug_print:
             print("\n".join(self.screen.display))
 
@@ -169,7 +191,7 @@ class NhClient:
         self.command_history.append(message)
         screen = self.render_data(data)
         self.history.append(screen)
-        self._set_states()
+        self._read_states()
         return data
 
     def close(self):
@@ -246,7 +268,7 @@ class NhClient:
 
         return data
 
-    def _set_states(self):
+    def _read_states(self):
         page = " ".join(self.screen.display)
         self.is_special_prompt = False
         for s in self._states:
@@ -263,6 +285,9 @@ class NhClient:
             if c != ' ':
                 self.is_blank = False
                 break
+        if self.is_game_screen and self.cursor.y == 0 and not self.is_special_prompt:
+            raise ValueError("Unexpected prompt")
+
 
     def _get_states(self):
         states = {}

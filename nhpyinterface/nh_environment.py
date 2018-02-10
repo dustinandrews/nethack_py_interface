@@ -33,6 +33,7 @@ class NhEnv():
         self.nhstate = NhState(self.nhc)
         self.nhc.send_string('\n')
         self.nhc.start_session()
+        self.nhc._clear_more()
 
     def __del__(self):
         self.nhc.close()
@@ -42,11 +43,13 @@ class NhEnv():
         Start a new game
         """
         self.nhc.reset_game()
-        self.nhc.start_session()
+        self.is_done = False
+        self.nhc._clear_more()
         return self.data()
 
 
     def step(self, action: int, strategy: int = 0):
+        self.nhc._clear_more()
         if self.is_done:
             raise ValueError("Simulation ended and must be reset")
         last_status = self.nhc.get_status()
@@ -64,6 +67,8 @@ class NhEnv():
         r = self.score_move(last_status, last_screen)
 
         print(info['t'], end=", ")
+        if int(info['t']) < 1 and not self.is_done:
+            raise ValueError("t > 0 expected")
         return s_, r, t, info
 
     def score_move(self, last_status, last_screen):
@@ -111,10 +116,10 @@ if __name__ == '__main__':
 
 
 #%%
-    def random_agent(nhe):
+    def random_agent(nhe, reps=1000):
         actions = np.arange(1,10)
         reps = 0
-        while True:
+        while not nhe.is_done:
             strategy = np.random.choice([0,1])
             action = np.random.choice(actions)
             s_, r, t, info = nhe.step(action, strategy)
@@ -141,4 +146,7 @@ if __name__ == '__main__':
                    reps = int(x)
                except:
                    reps = 0
+        nhe.reset()
+
+    random_agent(nhe)
 

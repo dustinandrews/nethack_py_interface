@@ -11,7 +11,6 @@ from monsters import Monsters
 from objects import Objects
 from rooms import RoomTiles
 import os
-import sys
 
 class NhData():
     """
