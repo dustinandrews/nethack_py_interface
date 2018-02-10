@@ -26,6 +26,7 @@ class NhEnv():
             1: 'explore'
             }
 
+
     def __init__(self):
         self.nhc = NhClient()
         self.actions = self.nhc.nhdata.get_commands(1)
@@ -55,7 +56,7 @@ class NhEnv():
         last_status = self.nhc.get_status()
         last_screen = self.nhc.buffer_to_npdata()
         if self.strategies[strategy] == 'explore':
-           self. _do_exploration_move(action)
+           self._do_exploration_move(action)
         else:
             self._do_direct_action(action)
 
@@ -63,12 +64,14 @@ class NhEnv():
 
         #s_, r, t, info
         s_, info = self.data(), self.nhc.get_status()
-        t = self.is_done
         r = self.score_move(last_status, last_screen)
 
-        print(info['t'], end=", ")
-        if int(info['t']) < 1 and not self.is_done:
-            raise ValueError("t > 0 expected")
+        turn = info['t']
+        print(turn, end=", ")
+        if int(turn) < 1 and not self.is_done:
+            self.is_done = True
+
+        t = self.is_done
         return s_, r, t, info
 
     def score_move(self, last_status, last_screen):

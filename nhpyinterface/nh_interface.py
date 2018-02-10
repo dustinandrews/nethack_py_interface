@@ -108,9 +108,9 @@ class NhClient:
             self.tn.read_until(prompt,2)
             self.send_and_read_to_prompt(prompt, b'l')
             message = self.username.encode(self.encoding) + b'\n'
-            self.send_and_read_to_prompt(prompt, message, debug_print=True)
-            self.send_and_read_to_prompt(prompt, message, debug_print=True)
-        self.send_and_read_to_prompt(prompt, b'p', debug_print=True) # play
+            self.send_and_read_to_prompt(prompt, message)
+            self.send_and_read_to_prompt(prompt, message)
+        self.send_and_read_to_prompt(prompt, b'p') # play
         self._clear_more()
 
         # Important not to send anything while stale processes are being killed
@@ -121,7 +121,7 @@ class NhClient:
             page = self.render_data(data)
             self.history.append(page)
             self._read_states()
-        self.tn.read_until(self._more_prompt, 2)
+        self.tn.read_until(self._more_prompt, 1)
         self._clear_more()
 
     def reset_game(self):

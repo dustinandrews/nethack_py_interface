@@ -35,7 +35,7 @@ class NhState:
 
             if self.nhc.is_always_no_question:
                 self.nhc.send_string('n\n')
-            if self.nhc.is_killed:
+            if self.nhc.is_killed or self.nhc.is_dgamelaunch:
                 done = True
             self._parse_screen()
             if self.nhc.is_always_yes_question:

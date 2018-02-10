@@ -110,7 +110,21 @@ class NhData():
 
 
     def get_status(self, lines):
-        return_dict = {'t':0, 'dlvl': -1}
+        return_dict = {
+                     'ac': 0,
+                     'ch': 0,
+                     'co': 0,
+                     'dlvl': -1,
+                     'dx': 0,
+                     'hp': 0,
+                     'in': 0,
+                     'pw': 0,
+                     'st': 0,
+                     'st2': 0,
+                     't': -1,
+                     'wi': 0,
+                     'xp': -1,
+                     'zorkmids': -1}
         lines.reverse()
         found = 0
         for line in lines:
