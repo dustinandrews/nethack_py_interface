@@ -93,8 +93,7 @@ class NhEnv():
         if action >= self.num_actions:
             raise ValueError('No such action {}, limit is {}'.format(action, self.num_actions-1))
         if action not in self.nhc.nhdata.MOVE_COMMANDS:
-            # No op
-            return
+            action = 10 # wait
         self.nhc.send_command(action)
 
     def _do_exploration_move(self, action):

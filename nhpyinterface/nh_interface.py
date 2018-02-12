@@ -60,8 +60,9 @@ class NhClient:
     is_dgamelaunch         = False
     is_dg_logged_in        = False
     is_fainted             = False
+    is_call_prompt         = False
 
-    _special_prompts = ['end', 'more', 'question', 'count']
+    _special_prompts = ['end', 'more', 'question', 'count', 'call_prompt']
 
 
     _states = { 'always_yes_question': ['Force its termination? [yn]'],
@@ -75,7 +76,8 @@ class NhClient:
         'count':['Count: '],
         'dg_logged_in':['Logged in as'],
         'game_screen':['Dlvl:'],
-        'fainted':['Fainted']
+        'fainted':['Fainted'],
+        'call_prompt':['Call a']
         }
 
 
@@ -97,7 +99,6 @@ class NhClient:
         print('start session')
         if not self.tn:
             self.tn = telnetlib.Telnet(self.game_address)
-
 
         self._clear_more()
         if not self.is_dgamelaunch:
@@ -137,16 +138,17 @@ class NhClient:
 
         t = self.nhdata.get_status(self.screen.display)['t']
         if self.is_game_screen and t != 1:
-            self.send_and_read_to_prompt(b'[yes/no]?', b'#quit\n', debug_print=True)
-            self.send_and_read_to_prompt(b'(end)', b'yes\n', debug_print=True)
+            self.send_and_read_to_prompt(b'[yes/no]?', b'#quit\n')
+            self.send_and_read_to_prompt(b'(end)', b'yes\n')
             self._clear_more()
             self.start_session()
 
 
     def _clear_more(self):
         self._read_states()
-        while self.is_end or self.is_more or self.is_blank:
-            self.send_and_read_to_prompt(self._more_prompt, b'\n', debug_print=True)
+        while self.is_end or self.is_more\
+            or self.is_blank or self.is_call_prompt:
+            self.send_and_read_to_prompt(self._more_prompt, b'\n')
 
     def render_glyphs(self):
         """
@@ -175,7 +177,7 @@ class NhClient:
 
         try:
             self.tn.write(message)
-            #print(prompt, message)
+            #print(message)
             data = self.tn.read_until(prompt, timeout)
             data += self.tn.read_very_eager()
         except EOFError:
