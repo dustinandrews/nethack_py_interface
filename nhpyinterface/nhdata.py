@@ -31,12 +31,12 @@ class NhData():
         2: Command ('S', '2', 1 ),
         3: Command ('SE', '3', 1 ),
         4: Command ('W', '4', 1 ),
+        5: Command('SEARCH', 's', 1 ),
         6: Command ('E', '6', 1 ),
         7: Command ('NW', '7', 1 ),
         8: Command ('N', '8', 1 ),
         9: Command ('NE', '9', 1 ),
 
-        5: Command ('UP', '<', 1 ),
         10:Command('WAIT', '.', 2 ),
         11:Command('OPEN', 'o', 10 ),
         12:Command('PICKUP', ',', 2 ),
@@ -56,7 +56,7 @@ class NhData():
         26:Command('QUIVER', 'Q', 10 ),
         27:Command('READ', 'r', 10 ),
         28:Command('REMOVE', 'R', 10 ),
-        29:Command('SEARCH', 's', 2 ),
+        29:Command ('UP', '<', 2 ),
         30:Command('TAKEOFF', 'T', 10 ),
         31:Command('TELEPORT', '\x14', 10 ),
         32:Command('THROW', 't', 10 ),
@@ -111,6 +111,7 @@ class NhData():
 
     def get_status(self, lines):
         return_dict = {
+                     'hp_max':0,
                      'ac': 0,
                      'ch': 0,
                      'co': 0,
@@ -124,37 +125,33 @@ class NhData():
                      't': -1,
                      'wi': 0,
                      'xp': -1,
-                     'zorkmids': -1}
-        lines.reverse()
-        found = 0
-        for line in lines:
-            char_stats = re.search(
-                r'St:(?P<st>[\d]+)'
-                r'/(?P<st2>[\d]+)\s*'
-                r'Dx:(?P<dx>\d+)\s*'
-                r'Co:(?P<co>\d+)\s*'
-                r'In:(?P<in>\d+)\s*'
-                r'Wi:(?P<wi>\d+)\s*'
-                r'Ch:(?P<ch>\d+)\s*', line)
-            if char_stats:
-                found += 1
-                return_dict = {**return_dict, **char_stats.groupdict()}
+                     'zorkmids': -1,
+                     'score': 0}
 
-            dungeon_stats = re.search(
-                r'Dlvl:(?P<dlvl>\d+)\s*'
-                r'\$:(?P<zorkmids>\d+)\s*'
-                r'HP:(?P<hp>\d+)\(\d+\)\s*'
-                r'Pw:(?P<pw>\d+)\(\d+\)\s*'
-                r'AC:(?P<ac>\d+)\s*'
-                r'Xp:(?P<xp>\d+)([/\d]+)\s*'
-                r'T:(?P<t>\d+)'
-                , line)
-            if dungeon_stats:
-                found += 1
-                return_dict = {**return_dict, **dungeon_stats.groupdict()}
+        char_stats = re.search(
+        r'St:(?P<st>\d+)'
+        r'.*Dx:(?P<dx>\d+)'
+        r'.*Co:(?P<co>\d+)'
+        r'.*In:(?P<in>\d+)'
+        r'.*Wi:(?P<wi>\d+)'
+        r'.*Ch:(?P<ch>\d+)'
+        r'.*S:(?P<score>\d+)', lines[-2])
+        if char_stats:
+            return_dict = {**return_dict, **char_stats.groupdict()}
 
-            if found > 1:
-                break
+        dungeon_stats = re.search(
+            r'Dlvl:(?P<dlvl>\d+)'
+            r'.*\$:(?P<zorkmids>\d+)'
+            r'.*HP:(?P<hp>\d+)'
+            r'.*\((?P<hp_max>\d+)\)'
+            r'.*Pw:(?P<pw>\d+)\(\d+\)'
+            r'.*AC:(?P<ac>\d+)'
+            r'.*Xp:(?P<xp>\d+)([/\d]+)'
+            r'.*T:(?P<t>\d+)'
+            , lines[-1])
+
+        if dungeon_stats:
+            return_dict = {**return_dict, **dungeon_stats.groupdict()}
         # Convert to ints
         for k in return_dict:
             return_dict[k] = int(return_dict[k])

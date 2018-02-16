@@ -59,8 +59,8 @@ class NhEnv():
         self.nhc._clear_more()
         if self.is_done:
             raise ValueError("Simulation ended and must be reset")
-        last_status = self.nhc.get_status()
-        last_screen = self.data()
+        self.last_status = self.nhc.get_status()
+        self.last_screen = self.nhc.buffer_to_rgb()
         if self.strategies[strategy] == 'explore':
            self._do_exploration_move(action)
         else:
@@ -70,7 +70,7 @@ class NhEnv():
 
         #s_, r, t, info
         s_, info = self.data(), self.nhc.get_status()
-        r = self.score_move(last_status, last_screen)
+        r = self.score_move()
 
         turn = info['t']
 
@@ -82,16 +82,32 @@ class NhEnv():
         t = self.is_done
         return s_, r, t, info
 
-    def score_move(self, last_status, last_screen):
-        new_status = self.nhc.get_status()
-        new_screen = self.data()
-        screen_diff = last_screen - new_screen
-        explore = len(screen_diff[screen_diff != 0])
-        score = explore - 1 # Offset score turn and punish no-ops like wall bumps
-        for key in new_status:
-            if key in last_status.keys():
-                if last_status[key] < new_status[key]:
-                    score += 1
+    def score_move(self):
+        score = -1 #died/offset turn counter
+        if not self.is_done:
+
+            if self.nhc.is_killed_something:
+                score = 1
+
+            new_status = self.nhc.get_status()
+            new_screen = self.nhc.buffer_to_rgb()
+            screen_diff = self.last_screen - new_screen
+            explore = len(screen_diff[screen_diff != 0])
+            score += explore / 50.0 # Scale the score to be approx 0-1
+
+            for key in new_status:
+                if key in self.last_status.keys() and key is not 'hp':
+                    if self.last_status[key] < new_status[key]:
+                        score += 1 / len(new_status.keys())
+                    if self.last_status[key] > new_status[key]:
+                        score -= 1 / len(new_status.keys())
+
+            hp = int(new_status['hp'])
+            hp_max = int(new_status['hp_max'])
+            hp_score = (hp/hp_max) - 1
+
+            score += hp_score
+
         return score
 
     def auxiliary_features(self):
@@ -122,6 +138,9 @@ class NhEnv():
         return a
 
     def close(self):
+        if self.nhc.is_game_screen:
+            self.nhc.send_string('S')
+            self.nhc.send_string('y')
         self.nhc.close()
 
 
@@ -141,7 +160,7 @@ class NhEnv():
 if __name__ == '__main__':
 
 
-    #nhe = NhEnv()
+    nhe = NhEnv()
     #print("\n".join(nhe.nhc.screen.display))
 
 
@@ -224,6 +243,16 @@ if __name__ == '__main__':
 
 
 #%%
+
+    def close_connections(envs):
+        for e in envs:
+            t = threading.Thread(target=e.close, name="closer" + str(e) )
+            t.start()
+        for t in threading.enumerate():
+            if "closer" in t.name:
+                print(t.name)
+                t.join(20)
+
     #envs = create_envs(1)
 
 #%%
