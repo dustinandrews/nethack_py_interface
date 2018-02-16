@@ -66,7 +66,7 @@ class NhClient:
 
 
     _states = { 'always_yes_question': ['Force its termination? [yn]'],
-        'killed':['killed by'],
+        'killed':['killed by', 'Voluntary challenges'],
         'end':['(end)'],
         'stale':['stale'],
         'more':['--More--'],
@@ -96,16 +96,16 @@ class NhClient:
          self.close()
 
     def start_session(self):
-        print('start session')
+        print('start session ' + self.username)
         if not self.tn:
             self.tn = telnetlib.Telnet(self.game_address)
 
         self._clear_more()
         if not self.is_dgamelaunch:
-            print('Not in dgamelaunch menu')
+            print('Not in dgamelaunch menu ' +  self.username)
             return
         prompt = b'=>'
-        if not self.is_dg_logged_in:
+        if not self.is_dg_logged_in or self.is_game_screen:
             self.tn.read_until(prompt,2)
             self.send_and_read_to_prompt(prompt, b'l')
             message = self.username.encode(self.encoding) + b'\n'
@@ -126,7 +126,7 @@ class NhClient:
         self._clear_more()
 
     def reset_game(self):
-        print('reset')
+        print('reset ' + self.username)
 
         if not self.tn:
             self.tn = telnetlib.Telnet(self.game_address)
@@ -134,6 +134,7 @@ class NhClient:
 
         self._clear_more()
         if self.is_dgamelaunch:
+            print("dgamelaunch " + self.username)
             self.start_session()
 
         t = self.nhdata.get_status(self.screen.display)['t']
@@ -177,17 +178,16 @@ class NhClient:
 
         try:
             self.tn.write(message)
-            #print(message)
+            if debug_print:
+                print(message)
             data = self.tn.read_until(prompt, timeout)
             data += self.tn.read_very_eager()
         except EOFError:
-            print("Telnet connection lost, reconnecting")
+            print("Telnet connection lost")
             self.tn = None
-            self.start_session()
 
         if debug_print:
             print("\n".join(self.screen.display))
-
 
         self.data_history.append(data)
         self.command_history.append(message)
@@ -197,8 +197,8 @@ class NhClient:
         return data
 
     def close(self):
-        print("closing")
         if self.tn:
+            print("closing")
             self.send_string('S')
             self.send_string('y\n')
             self.tn.close()
@@ -271,6 +271,8 @@ class NhClient:
         return data
 
     def _read_states(self):
+        data = self.tn.read_very_eager()
+        self.render_data(data)
         page = " ".join(self.screen.display)
         self.is_special_prompt = False
         for s in self._states:
@@ -297,6 +299,25 @@ class NhClient:
             states[s] = getattr(self, "is_" + s)
         states['blank'] = self.is_blank
         return states
+
+    def _create_login(self, login_name):
+        if self.is_dg_logged_in:
+            self.send_string("q")
+            self.tn = None
+
+        if not self.tn:
+            self.tn = telnetlib.Telnet(self.game_address)
+
+        prompt = b'=>'
+        message = login_name + "\n"
+        self.send_and_read_to_prompt(prompt, ' ')
+        self.send_and_read_to_prompt(prompt, 'r', debug_print=True)
+        self.send_and_read_to_prompt(prompt, message, debug_print=True)
+        self.send_and_read_to_prompt(prompt, message, debug_print=True)
+        self.send_and_read_to_prompt(prompt, message, debug_print=True)
+        self.send_and_read_to_prompt(prompt, login_name + '@local.host\n', debug_print=True)
+        self.send_string("q")
+
 
     def imshow_map(self):
         img = self.render_glyphs()
@@ -332,7 +353,7 @@ if __name__ == '__main__':
 
 #%%
 
-#    nhc = NhClient()
+    nhc = NhClient()
 #    nhc.start_session()
 #    rgb = nhc.buffer_to_rgb()
 #    plt.imshow(rgb)

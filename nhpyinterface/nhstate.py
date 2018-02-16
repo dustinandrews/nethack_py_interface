@@ -12,6 +12,7 @@ class NhState:
     """
     Class to understand stuff about the game, like inventory and items.
     """
+    DEBUG_PRINT = False
     progress_filename = "nh_progress.dat"
 
     def __init__(self, nhc : NhClient):
@@ -59,7 +60,7 @@ class NhState:
         Examine screen for interesting stuff.
         Potentially check on inventory.
         """
-        if self.nhc.is_killed:
+        if self.nhc.is_killed and self.DEBUG_PRINT:
             print()
             print("\n".join(self.nhc.screen.display))
 
