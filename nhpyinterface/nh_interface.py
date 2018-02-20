@@ -29,7 +29,7 @@ class NhClient:
     Uses telnet to connect to Nethack and communicate on a basic level with
     it. Note to self: Do not put game logic here. This is a low level interface.
     """
-
+    DEBUG_PRINT = False
     game_address = 'localhost'
     game_port = 23
     cols = 80
@@ -96,12 +96,13 @@ class NhClient:
          self.close()
 
     def start_session(self):
-        print('start session ' + self.username)
+        if self.DEBUG_PRINT:
+            print('start session ' + self.username)
         if not self.tn:
             self.tn = telnetlib.Telnet(self.game_address)
 
         self._clear_more()
-        if not self.is_dgamelaunch:
+        if not self.is_dgamelaunch and self.DEBUG_PRINT:
             print('Not in dgamelaunch menu ' +  self.username)
             return
         prompt = b'=>'
@@ -126,7 +127,8 @@ class NhClient:
         self._clear_more()
 
     def reset_game(self):
-        print('reset ' + self.username)
+        if self.DEBUG_PRINT:
+            print('reset ' + self.username)
 
         if not self.tn:
             self.tn = telnetlib.Telnet(self.game_address)
@@ -134,7 +136,8 @@ class NhClient:
 
         self._clear_more()
         if self.is_dgamelaunch:
-            print("dgamelaunch " + self.username)
+            if self.DEBUG_PRINT:
+                print("dgamelaunch " + self.username)
             self.start_session()
 
         t = self.nhdata.get_status(self.screen.display)['t']
@@ -169,7 +172,7 @@ class NhClient:
                     screen[row*32:(row*32)+32,col*32:(col*32)+32,:] = tile
         return screen
 
-    def send_and_read_to_prompt(self, prompt, message, timeout=2, debug_print = False):
+    def send_and_read_to_prompt(self, prompt, message, timeout=2):
         if type(prompt) == str:
             prompt = prompt.encode('ascii')
 
@@ -178,7 +181,7 @@ class NhClient:
 
         try:
             self.tn.write(message)
-            if debug_print:
+            if self.DEBUG_PRINT:
                 print(message)
             data = self.tn.read_until(prompt, timeout)
             data += self.tn.read_very_eager()
@@ -186,7 +189,7 @@ class NhClient:
             print("Telnet connection lost")
             self.tn = None
 
-        if debug_print:
+        if self.DEBUG_PRINT:
             print("\n".join(self.screen.display))
 
         self.data_history.append(data)
@@ -198,11 +201,11 @@ class NhClient:
 
     def close(self):
         if self.tn:
-            print("closing")
             self.send_string('S')
             self.send_string('y\n')
             self.tn.close()
             self.tn = None
+        return ("closed " + self.username)
 
     def _init_screen(self):
         self.byte_stream = ByteStream()
@@ -311,11 +314,11 @@ class NhClient:
         prompt = b'=>'
         message = login_name + "\n"
         self.send_and_read_to_prompt(prompt, ' ')
-        self.send_and_read_to_prompt(prompt, 'r', debug_print=True)
-        self.send_and_read_to_prompt(prompt, message, debug_print=True)
-        self.send_and_read_to_prompt(prompt, message, debug_print=True)
-        self.send_and_read_to_prompt(prompt, message, debug_print=True)
-        self.send_and_read_to_prompt(prompt, login_name + '@local.host\n', debug_print=True)
+        self.send_and_read_to_prompt(prompt, 'r')
+        self.send_and_read_to_prompt(prompt, message)
+        self.send_and_read_to_prompt(prompt, message)
+        self.send_and_read_to_prompt(prompt, message)
+        self.send_and_read_to_prompt(prompt, login_name + '@local.host\n')
         self.send_string("q")
 
 

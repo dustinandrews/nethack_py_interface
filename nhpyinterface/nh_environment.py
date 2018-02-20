@@ -55,6 +55,10 @@ class NhEnv():
         return self.data()
 
 
+    def step_with_callback(self, callback):
+        a,s = callback(self.data())
+        return self.step(a,s)
+
     def step(self, action: int, strategy: int = 0):
         self.nhc._clear_more()
         if self.is_done:
@@ -84,29 +88,37 @@ class NhEnv():
 
     def score_move(self):
         score = -1 #died/offset turn counter
+
+        score_kills = True
+        score_hp = False
+        score_exploration = True
+        score_status = False
+
         if not self.is_done:
 
-            if self.nhc.is_killed_something:
+            if self.nhc.is_killed_something and score_kills:
                 score = 1
 
-            new_status = self.nhc.get_status()
-            new_screen = self.nhc.buffer_to_rgb()
-            screen_diff = self.last_screen - new_screen
-            explore = len(screen_diff[screen_diff != 0])
-            score += explore / 50.0 # Scale the score to be approx 0-1
+            if score_exploration:
+                new_status = self.nhc.get_status()
+                new_screen = self.nhc.buffer_to_rgb()
+                screen_diff = self.last_screen - new_screen
+                explore = len(screen_diff[screen_diff != 0])
+                score += explore / 50.0 # Scale the score to be approx 0-1
 
-            for key in new_status:
-                if key in self.last_status.keys() and key is not 'hp':
-                    if self.last_status[key] < new_status[key]:
-                        score += 1 / len(new_status.keys())
-                    if self.last_status[key] > new_status[key]:
-                        score -= 1 / len(new_status.keys())
+            if score_status:
+                for key in new_status:
+                    if key in self.last_status.keys() and key is not 'hp':
+                        if self.last_status[key] < new_status[key]:
+                            score += 1 / len(new_status.keys())
+                        if self.last_status[key] > new_status[key]:
+                            score -= 1 / len(new_status.keys())
 
-            hp = int(new_status['hp'])
-            hp_max = int(new_status['hp_max'])
-            hp_score = (hp/hp_max) - 1
-
-            score += hp_score
+            if score_hp:
+                hp = int(new_status['hp'])
+                hp_max = int(new_status['hp_max'])
+                hp_score = ((hp + 1e-10)/(hp_max + 1e-10)) - 1
+                score += hp_score
 
         return score
 
