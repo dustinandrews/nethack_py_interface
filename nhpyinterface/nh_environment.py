@@ -56,10 +56,16 @@ class NhEnv():
 
 
     def step_with_callback(self, callback):
-        a,s = callback(self.data())
-        return self.step(a,s)
+        action, strategy = callback(self.data())
+        s = self.data()
+        h = self.auxiliary_features()
+        s_, r, t, info = self.step(action,strategy)
+        return s, action, r, s_, t, h
+
 
     def step(self, action: int, strategy: int = 0):
+        assert type(action) == int
+        assert type(strategy) == int
         self.nhc._clear_more()
         if self.is_done:
             raise ValueError("Simulation ended and must be reset")
