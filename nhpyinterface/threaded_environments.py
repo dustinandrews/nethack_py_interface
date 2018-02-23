@@ -72,6 +72,7 @@ class MultiThreadEnvironments():
 
 if __name__ == '__main__':
     import numpy as np
+    from matplotlib import pyplot as plt
 
     def test_callback(data):
         return (np.random.randint(10),0)
@@ -82,9 +83,15 @@ if __name__ == '__main__':
     results = mte.step_environments()
     print(mte.get_env_turns())
     mte.close()
+
+    for k in mte.envs:
+        plt.imshow(results[k][0])
+        plt.show()
+
 #%%
-    def run_1k():
-        for _ in range(1000):
+    def run_muliple_sessions(n):
+        for _ in range(n):
+            print(_, end=" ")
             mte.reset_done_environments()
             mte.step_environments()
             print(mte.get_env_turns())

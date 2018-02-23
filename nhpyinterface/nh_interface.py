@@ -42,7 +42,6 @@ class NhClient:
     MAX_GLYPH = 1012
     map_x_y = MapXY(21,80)
     nhdata = NhData()
-    cursor = Point(0,0)
     monster_count = len(nhdata.monsters.monster_data)
     tn = None
     _more_prompt = b'ore--\x1b[27m\x1b[3z'
@@ -65,7 +64,7 @@ class NhClient:
     _special_prompts = ['end', 'more', 'question', 'count', 'call_prompt']
 
 
-    _states = { 'always_yes_question': ['Force its termination? [yn]'],
+    _states = { 'always_yes_question': ['Force its termination? [yn]', 'Really save?'],
         'killed':['killed by', 'Voluntary challenges'],
         'end':['(end)'],
         'stale':['stale'],
@@ -216,8 +215,6 @@ class NhClient:
     def render_data(self, data):
         self.byte_stream.feed(data)
         lines = self.screen.display
-        self.cursor.x = self.screen.cursor.x
-        self.cursor.y = self.screen.cursor.y - 1 # last char is just before cursor
         return lines
 
     def buffer_to_npdata(self):
@@ -252,8 +249,8 @@ class NhClient:
         rgb[:,:,2] = g
 
         # cursor axis are flipped v.s. image or I made more x,y mistakes
-        if self.cursor.y < self.map_x_y.x and self.cursor.x < self.map_x_y.y:
-            rgb[self.cursor.y, self.cursor.x, :] = 1 # highlight player.
+        if self.screen.cursor.y - 1< self.map_x_y.x and self.screen.cursor.x < self.map_x_y.y:
+            rgb[self.screen.cursor.y - 1, self.screen.cursor.x, :] = 1 # highlight player.
 
         return rgb
 
@@ -292,7 +289,7 @@ class NhClient:
             if c != ' ':
                 self.is_blank = False
                 break
-        if self.is_game_screen and self.cursor.y == 0 and not self.is_special_prompt:
+        if self.is_game_screen and self.screen.cursor.y == 0 and not self.is_special_prompt:
             raise ValueError("Unexpected prompt")
 
 
@@ -357,9 +354,15 @@ if __name__ == '__main__':
 #%%
 
     nhc = NhClient()
-#    nhc.start_session()
-#    rgb = nhc.buffer_to_rgb()
-#    plt.imshow(rgb)
+    nhc.start_session()
+    rgb = nhc.buffer_to_rgb()
+    plt.imshow(rgb)
+    plt.show()
+    nhc.send_string(".")
+    rgb = nhc.buffer_to_rgb()
+    plt.imshow(rgb)
+    plt.show()
+
 
 
 #    nh.byte_stream.feed(b''.join(nh.nhdata.SAMPLE_DATA))
@@ -369,3 +372,13 @@ if __name__ == '__main__':
 #    img = nh.render_glyphs()
 #    png.from_array(img.tolist(), 'RGB').save('map.png')
 #    npdata = nh.buffer_to_npdata()
+#%%
+def test_cursor():
+    nhc.send_command(6)
+    rgb1 = nhc.buffer_to_rgb()
+    nhc.send_command(4)
+    rgb2 = nhc.buffer_to_rgb()
+    plt.imshow(rgb1)
+    plt.show()
+    plt.imshow(rgb2)
+    plt.show()
