@@ -70,7 +70,7 @@ class NhClient:
         'stale':['stale'],
         'more':['--More--'],
         'killed_something':['You kill'],
-        'always_no_question':['Still climb?' , 're you sure?'],
+        'always_no_question':['Still climb?' , 're you sure?', 'Really quit?'],
         'dgamelaunch':['dgamelaunch'],
         'count':['Count: '],
         'dg_logged_in':['Logged in as'],

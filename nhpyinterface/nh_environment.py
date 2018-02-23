@@ -56,6 +56,8 @@ class NhEnv():
 
 
     def step_with_callback(self, callback):
+        if self.is_done:
+            self.reset()
         action, strategy = callback(self)
         s = self.data()
         h = self.auxiliary_features()
