@@ -15,6 +15,9 @@ import matplotlib.pyplot as plt
 from nhdata import NhData
 import collections
 import os
+import logging
+
+
 
 class Point:
     __slots__ = ['x', 'y']
@@ -29,7 +32,7 @@ class NhClient:
     Uses telnet to connect to Nethack and communicate on a basic level with
     it. Note to self: Do not put game logic here. This is a low level interface.
     """
-    DEBUG_PRINT = False
+    logger = logging.getLogger(__name__)
     game_address = 'localhost'
     game_port = 23
     cols = 80
@@ -95,17 +98,19 @@ class NhClient:
          self.close()
 
     def start_session(self):
-        if self.DEBUG_PRINT:
-            print('start session ' + self.username)
+        self.logger.info('start session ' + self.username)
+
         if not self.tn:
+            self.logger.debug('connect session ' + self.username)
             self.tn = telnetlib.Telnet(self.game_address)
 
         self._clear_more()
-        if not self.is_dgamelaunch and self.DEBUG_PRINT:
-            print('Not in dgamelaunch menu ' +  self.username)
+        if not self.is_dgamelaunch:
+            self.logger.debug('Not in dgamelaunch menu ' +  self.username)
             return
         prompt = b'=>'
         if not self.is_dg_logged_in or self.is_game_screen:
+            self.logger.info('log in ' + self.username)
             self.tn.read_until(prompt,2)
             self.send_and_read_to_prompt(prompt, b'l')
             message = self.username.encode(self.encoding) + b'\n'
@@ -117,7 +122,7 @@ class NhClient:
         # Important not to send anything while stale processes are being killed
         # Ideally won't end up in this loop much outside of testing.
         while self.is_stale:
-            print("stale")
+            self.logger.info("stale " + self.username)
             data = self.tn.read_until(b'seconds.', 1)
             page = self.render_data(data)
             self.history.append(page)
@@ -126,8 +131,7 @@ class NhClient:
         self._clear_more()
 
     def reset_game(self):
-        if self.DEBUG_PRINT:
-            print('reset ' + self.username)
+        self.logger.info('Resetting ' + self.username)
 
         if not self.tn:
             self.tn = telnetlib.Telnet(self.game_address)
@@ -135,16 +139,16 @@ class NhClient:
 
         self._clear_more()
         if self.is_dgamelaunch:
-            if self.DEBUG_PRINT:
-                print("dgamelaunch " + self.username)
-            self.start_session()
+                self.logger.debug("dgamelaunch " + self.username)
+
 
         t = self.nhdata.get_status(self.screen.display)['t']
         if self.is_game_screen and t != 1:
             self.send_and_read_to_prompt(b'[yes/no]?', b'#quit\n')
             self.send_and_read_to_prompt(b'(end)', b'yes\n')
             self._clear_more()
-            self.start_session()
+
+        self.start_session()
 
 
     def _clear_more(self):
@@ -180,17 +184,12 @@ class NhClient:
 
         try:
             self.tn.write(message)
-            if self.DEBUG_PRINT:
-                print(message)
+            self.logger.debug(message)
             data = self.tn.read_until(prompt, timeout)
             data += self.tn.read_very_eager()
         except EOFError:
-            print("Telnet connection lost")
-            self.tn = None
-
-        if self.DEBUG_PRINT:
-            print("\n".join(self.screen.display))
-
+           self.logger.warn("Telnet connection lost")
+           self.tn = None
         self.data_history.append(data)
         self.command_history.append(message)
         screen = self.render_data(data)
@@ -271,6 +270,8 @@ class NhClient:
         return data
 
     def _read_states(self):
+        if not self.tn:
+            self.tn = telnetlib.Telnet(self.game_address)
         data = self.tn.read_very_eager()
         self.render_data(data)
         page = " ".join(self.screen.display)

@@ -12,6 +12,9 @@ from nhstate import NhState
 from collections import namedtuple
 import numpy as np
 import skimage.transform
+import logging
+
+
 
 Aspace = namedtuple("action_space", "n")
 
@@ -19,6 +22,7 @@ class NhEnv():
     """
     More or less replicate an AI Gym environment for connecting to a NN.
     """
+    logger = logging.getLogger(__name__)
     action_space = Aspace(9)
     is_done = False
     _action_rating = 1
@@ -31,9 +35,8 @@ class NhEnv():
     output_shape = [84,84,3]
     last_turn = 0
 
-    DEBUG_PRINT = False
-
     def __init__(self, username='aa'):
+
         self.nhc = NhClient(username)
         self.actions = self.nhc.nhdata.get_commands(1)
         self.num_actions = len(self.actions)
@@ -49,6 +52,7 @@ class NhEnv():
         """
         Start a new game
         """
+        self.logger.info("Reset " + self.nhc.username)
         self.nhc.reset_game()
         self.is_done = False
         self.nhc._clear_more()
@@ -86,8 +90,7 @@ class NhEnv():
 
         turn = info['t']
 
-        if self.DEBUG_PRINT:
-            print(turn, end=", ")
+        self.logger.info("{} turn {}".format(self.nhc.username,turn))
         if int(turn) < 1 and not self.is_done:
             self.is_done = True
 
@@ -169,10 +172,6 @@ class NhEnv():
         for _ in range(reps):
             action = np.random.choice(actions)
             s_, r, t, info = self.step(action, 0)
-
-            if reps % 100 == 0:
-                print("{}: {}".format(_, self.nhc.username))
-
             if self.is_done:
                 self.reset()
 
@@ -181,103 +180,4 @@ if __name__ == '__main__':
 
 
     nhe = NhEnv()
-    #print("\n".join(nhe.nhc.screen.display))
-
-
-#%%
-
-    #random_agent(nhe)
-
-#%%
-    import time
-    def multi_random_agent(env_array, reps = 1000):
-        start = time.monotonic()
-        actions = np.arange(1,10)
-        for i in range(reps):
-            if i % 100 == 0:
-                print(i)
-            for e in env_array:
-                if not e.is_done:
-                    strategy = np.random.choice([0,1])
-                    action = np.random.choice(actions)
-                    s_, r, t, info = e.step(action, strategy)
-        end = time.monotonic()
-        return i, end-start
-
-#%%
-    import logging
-    import threading
-
-    logging.basicConfig(level=logging.DEBUG, format='(%(threadname)-10s) %(message)s')
-#%%
-    def worker(env):
-        try:
-            env.random_agent(1)
-        except:
-            pass
-        finally:
-            return
-
-
-#%%
-    def create_worker(envs, num, name):
-        e = NhEnv(name)
-        e.reset()
-        envs[num] = e
-        print("done")
-#%%
-    def create_envs(num):
-        offset = ord('b')
-        envs = [None for _ in range(num)]
-        for i in range(num):
-            name = chr(i+offset) * 2
-            print(name)
-            t = threading.Thread(target=create_worker, args=(envs, i, name), name=name)
-            t.start()
-        for t in threading.enumerate():
-            if t.name is name:
-                t.join(30)
-        return envs
-
-#%%
-    def threading_test(envs, index):
-        sub_index = 0
-        prefix = "env"
-        for e in envs:
-            t = threading.Thread(target=worker, args=(e,),
-                                 name=prefix + "-" + str(index) + "-" +str(sub_index))
-            t.start()
-            sub_index += 1
-        for t in threading.enumerate():
-            if prefix in t.name:
-                print("joining " + t.name)
-                t.join(15)
-
-#%%
-    def multi_threaded_agents(envs):
-        for i in range(1000):
-            threading_test(envs, i)
-            for e in envs:
-                print("{} {}".format(e.nhc.username,e.nhc.get_status()['t'] ), end=", ")
-            print()
-
-
-#%%
-
-    def close_connections(envs):
-        for e in envs:
-            t = threading.Thread(target=e.close, name="closer" + str(e) )
-            t.start()
-        for t in threading.enumerate():
-            if "closer" in t.name:
-                print(t.name)
-                t.join(20)
-
-    #envs = create_envs(1)
-
-#%%
-    #for e in envs:
-    #    print("{} {}".format(e.nhc.username,e.nhc.get_status()['t'] ), end=", ")
-
-#%%
-    #multi_threaded_agents(envs)
+    print("\n".join(nhe.nhc.screen.display))

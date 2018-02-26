@@ -26,14 +26,14 @@ class NhState:
         """
         done = False
         safety = 0
-        threshold = 10
+        threshold = 1000
         while not done and (self.nhc.is_special_prompt):
             if safety > threshold:
+                message = ""
                 attribs = dir(self.nhc)
                 for at in [a for a in attribs if 'is_' in a]:
-                    print('{}: {}'.format(at, getattr(self.nhc, at)))
-                raise ValueError("Unexpectedly looping")
-
+                    message += ' {}: {}\n'.format(at, getattr(self.nhc, at))
+                raise ValueError("Unexpectedly looping\n" + message)
             if self.nhc.is_always_no_question:
                 self.nhc.send_string('n\n')
             if self.nhc.is_killed or self.nhc.is_dgamelaunch:
