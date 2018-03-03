@@ -5,7 +5,7 @@ Created on Tue Feb  6 17:39:19 2018
 @author: dandrews
 """
 
-from nh_interface import NhClient
+from nh_interface import NhInterface
 import pickle
 
 class NhState:
@@ -15,8 +15,8 @@ class NhState:
     DEBUG_PRINT = False
     progress_filename = "nh_progress.dat"
 
-    def __init__(self, nhc : NhClient):
-        self.nhc = nhc
+    def __init__(self, nhi : NhInterface):
+        self.nhi = nhi
 
     def check_game_state(self):
         """
@@ -27,30 +27,30 @@ class NhState:
         done = False
         safety = 0
         threshold = 1000
-        while not done and (self.nhc.is_special_prompt):
+        while not done and (self.nhi.is_special_prompt):
             if safety > threshold:
                 message = ""
-                attribs = dir(self.nhc)
+                attribs = dir(self.nhi)
                 for at in [a for a in attribs if 'is_' in a]:
-                    message += ' {}: {}\n'.format(at, getattr(self.nhc, at))
+                    message += ' {}: {}\n'.format(at, getattr(self.nhi, at))
                 raise ValueError("Unexpectedly looping\n" + message)
-            if self.nhc.is_always_no_question:
-                self.nhc.send_string('n\n')
-            if self.nhc.is_killed or self.nhc.is_dgamelaunch:
+            if self.nhi.is_always_no_question:
+                self.nhi.send_string('n\n')
+            if self.nhi.is_killed or self.nhi.is_dgamelaunch:
                 done = True
             self._parse_screen()
-            if self.nhc.is_always_yes_question:
-                self.nhc.send_string('y')
-                self.nhc.send_string('\n')
-            elif self.nhc.is_always_no_question:
-                self.nhc.send_string('n')
-                self.nhc.send_string('\n')
+            if self.nhi.is_always_yes_question:
+                self.nhi.send_string('y')
+                self.nhi.send_string('\n')
+            elif self.nhi.is_always_no_question:
+                self.nhi.send_string('n')
+                self.nhi.send_string('\n')
             else:
-                self.nhc.send_string('\n')
+                self.nhi.send_string('\n')
             self._save_progress()
 
             # When fainted there can be a lot of messages to clear.
-            if not self.nhc.is_fainted:
+            if not self.nhi.is_fainted:
                 safety += 1
 
         return done
@@ -60,9 +60,9 @@ class NhState:
         Examine screen for interesting stuff.
         Potentially check on inventory.
         """
-        if self.nhc.is_killed and self.DEBUG_PRINT:
+        if self.nhi.is_killed and self.DEBUG_PRINT:
             print()
-            print("\n".join(self.nhc.screen.display))
+            print("\n".join(self.nhi.screen.display))
 
 
     def _save_progress(self):
@@ -72,4 +72,4 @@ class NhState:
         TODO: Consider being able to continue sessions.
         """
         with open(self.progress_filename, "wb") as outfile:
-            pickle.dump(self.nhc.data_history, outfile, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(self.nhi.data_history, outfile, protocol=pickle.HIGHEST_PROTOCOL)

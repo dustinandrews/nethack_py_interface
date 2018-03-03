@@ -6,16 +6,18 @@ Created on Mon Jan  8 17:00:26 2018
 
 With inspiration from the lmj nethack client https://github.com/lmjohns3/shrieker
 """
-
+import sys
+sys.path.append('d:/local/pyte')
 from pyte import Screen, ByteStream
 import telnetlib
-from sprites import SpriteSheet
+#from sprites import SpriteSheet
 import numpy as np
 import matplotlib.pyplot as plt
 from nhdata import NhData
 import collections
 import os
 import logging
+import time
 
 
 
@@ -27,7 +29,7 @@ class Point:
 
 MapXY = collections.namedtuple('mapxy', 'x y')
 
-class NhClient:
+class NhInterface:
     """
     Uses telnet to connect to Nethack and communicate on a basic level with
     it. Note to self: Do not put game logic here. This is a low level interface.
@@ -38,6 +40,7 @@ class NhClient:
     cols = 80
     rows = 24
     encoding = 'ascii'
+    SAVE_HISTORY = False
     history = []
     data_history = []
     command_history = []
@@ -64,22 +67,28 @@ class NhClient:
     is_fainted             = False
     is_call_prompt         = False
 
-    _special_prompts = ['end', 'more', 'question', 'count', 'call_prompt']
+    _special_prompts = ['end', 'more', 'question', 'count',
+                        'call_prompt', 'throw_prompt',
+                        'entry_problem'
+                        ]
 
 
-    _states = { 'always_yes_question': ['Force its termination? [yn]', 'Really save?'],
+    _states = {
+        'always_yes_question': ['Force its termination? [yn]', 'Really save?'],
+        'always_no_question':['Still climb?' , 're you sure?', 'Really quit?' 'Really attack'],
         'killed':['killed by', 'Voluntary challenges'],
         'end':['(end)'],
         'stale':['stale'],
         'more':['--More--'],
         'killed_something':['You kill'],
-        'always_no_question':['Still climb?' , 're you sure?', 'Really quit?'],
         'dgamelaunch':['dgamelaunch'],
         'count':['Count: '],
         'dg_logged_in':['Logged in as'],
         'game_screen':['Dlvl:'],
         'fainted':['Fainted'],
-        'call_prompt':['Call a']
+        'call_prompt':['Call a'],
+        'throw_prompt':['What do you want to throw?'],
+        'entry_problem':['There was a problem with your last entry.']
         }
 
 
@@ -89,20 +98,22 @@ class NhClient:
 
     def __init__(self, username='aa'):
         self.username = username
-        self.sprite_sheet = SpriteSheet(self.sprite_sheet_name, 40, 30)
+        #self.sprite_sheet = SpriteSheet(self.sprite_sheet_name, 40, 30)
         self._init_screen()
-        self.tn = telnetlib.Telnet(self.game_address)
-        self._read_states()
+        self.tn = self._connect_with_retry()
+
+        # Create placeholder for return data that is often updated
+        self.npdata = np.zeros((self.map_x_y.x, self.map_x_y.y), dtype=np.float32)
 
     def __del__(self):
          self.close()
 
     def start_session(self):
-        self.logger.info('start session ' + self.username)
+        self.logger.info('(re)start session ' + self.username)
 
         if not self.tn:
             self.logger.debug('connect session ' + self.username)
-            self.tn = telnetlib.Telnet(self.game_address)
+            self._connect_with_retry()
 
         self._clear_more()
         if not self.is_dgamelaunch:
@@ -124,8 +135,10 @@ class NhClient:
         while self.is_stale:
             self.logger.info("stale " + self.username)
             data = self.tn.read_until(b'seconds.', 1)
-            page = self.render_data(data)
-            self.history.append(page)
+            self.byte_stream.feed(data)
+            page = self.screen.display
+            if self.SAVE_HISTORY:
+                self.history.append(page)
             self._read_states()
         self.tn.read_until(self._more_prompt, 1)
         self._clear_more()
@@ -134,7 +147,7 @@ class NhClient:
         self.logger.info('Resetting ' + self.username)
 
         if not self.tn:
-            self.tn = telnetlib.Telnet(self.game_address)
+            self._connect_with_retry()
             self._read_states()
 
         self._clear_more()
@@ -155,6 +168,7 @@ class NhClient:
         self._read_states()
         while self.is_end or self.is_more\
             or self.is_blank or self.is_call_prompt:
+            self.logger.debug('clearing prompts')
             self.send_and_read_to_prompt(self._more_prompt, b'\n')
 
     def render_glyphs(self):
@@ -182,25 +196,35 @@ class NhClient:
         if type(message) == str:
             message = message.encode('ascii')
 
+        if not self.tn:
+            self.start_session()
+
         try:
             self.tn.write(message)
-            self.logger.debug(message)
             data = self.tn.read_until(prompt, timeout)
             data += self.tn.read_very_eager()
+            self.byte_stream.feed(data)
         except EOFError:
-           self.logger.warn("Telnet connection lost")
+           self.logger.warning("Telnet connection lost")
            self.tn = None
-        self.data_history.append(data)
-        self.command_history.append(message)
-        screen = self.render_data(data)
-        self.history.append(screen)
+           return b''
+        if self.SAVE_HISTORY:
+            self.data_history.append(data)
+            self.command_history.append(message)
+            self.history.append(self.screen.display)
+            self.logger.debug(message)
+            self.logger.debug("".join(self.screen.display))
         self._read_states()
         return data
 
     def close(self):
         if self.tn:
-            self.send_string('S')
-            self.send_string('y\n')
+            if self.is_game_screen:
+                self.send_string('S')
+                self.send_string('y')
+                self.send_string('\n')
+            else:
+                self.send_string('q')
             self.tn.close()
             self.tn = None
         return ("closed " + self.username)
@@ -211,32 +235,29 @@ class NhClient:
         self.byte_stream = ByteStream()
         self.byte_stream.attach(self.screen)
 
-    def render_data(self, data):
-        self.byte_stream.feed(data)
-        lines = self.screen.display
-        return lines
-
     def buffer_to_npdata(self):
-        skiplines = 1
-        npdata = np.zeros((self.map_x_y.x, self.map_x_y.y), dtype=np.float32)
-        npdata += 829 # set default to solid rock
-        for line in range(skiplines,self.map_x_y.x+skiplines):
-            for row in range(self.map_x_y.y):
-                if self.screen.buffer[line] == {}:
-                    continue
-                glyph = self.screen.buffer[line][row].glyph
-                glyph = self.nhdata.collapse_glyph(glyph)
-                if not self.screen.buffer[line][row].data == ' ':
-                    npdata[line-skiplines,row] = glyph
+        self.npdata = np.vectorize(self.nhdata.collapse_glyph)(self.screen.glyph_map)
 
-        return npdata
+#        skiplines = 1
+#        self.npdata *= 0
+#        self.npdata += 829 # set default to solid rock
+#        for line in range(skiplines,self.map_x_y.x+skiplines):
+#            for row in range(self.map_x_y.y):
+#                if self.screen.buffer[line] == {}:
+#                    continue
+#                glyph = self.screen.buffer[line][row].glyph
+#                glyph = self.nhdata.collapse_glyph(glyph)
+#                if not self.screen.buffer[line][row].data == ' ':
+#                    self.npdata[line-skiplines,row] = glyph
+
+        return self.npdata
 
     def buffer_to_rgb(self):
         npdata = self.buffer_to_npdata()
         min_m, max_m = self.nhdata.monsters.minkey, self.nhdata.monsters.maxkey
         min_o, max_o = self.nhdata.objects.minkey, self.nhdata.objects.maxkey
         min_r, max_r = self.nhdata.rooms.minkey, self.nhdata.rooms.maxkey
-        r,b,g = npdata.copy(), npdata.copy(), npdata.copy()
+        r,b,g = npdata.copy().astype(np.float32), npdata.copy().astype(np.float32), npdata.copy().astype(np.float32)
 
         r = self._normalize_layer(r, min_m, max_m) # creatures
         b = self._normalize_layer(b, min_r, max_r) # room
@@ -269,11 +290,30 @@ class NhClient:
 
         return data
 
+    def _connect_with_retry(self):
+        retries = 0
+        limit = 3
+        while retries < limit:
+            try:
+                self.logger.debug("Connection to {} retry {}".format(self.game_address, retries))
+                self.tn = telnetlib.Telnet(self.game_address)
+                data = self.tn.read_until(b'\x1b[19;3H=> ', 2)
+                self.byte_stream.feed(data)
+                return
+            except ConnectionRefusedError:
+                retries += 1
+                time.sleep(1 * retries )
+        self.logger.warning("{} connection refused".format(self.username))
+        raise ConnectionRefusedError
+
+
     def _read_states(self):
         if not self.tn:
-            self.tn = telnetlib.Telnet(self.game_address)
+            self.logger.warning("{} unexpectedly lost connection.".format(self.username))
+            self.start_session()
+        # TODO: is this ever not b''?
         data = self.tn.read_very_eager()
-        self.render_data(data)
+        self.byte_stream.feed(data)
         page = " ".join(self.screen.display)
         self.is_special_prompt = False
         for s in self._states:
@@ -302,20 +342,15 @@ class NhClient:
         return states
 
     def _create_login(self, login_name):
-        if self.is_dg_logged_in:
-            self.send_string("q")
-            self.tn = None
-
-        if not self.tn:
-            self.tn = telnetlib.Telnet(self.game_address)
-
         prompt = b'=>'
-        message = login_name + "\n"
-        self.send_and_read_to_prompt(prompt, ' ')
+        message = login_name
         self.send_and_read_to_prompt(prompt, 'r')
-        self.send_and_read_to_prompt(prompt, message)
-        self.send_and_read_to_prompt(prompt, message)
-        self.send_and_read_to_prompt(prompt, message)
+        self.send_and_read_to_prompt(b'', message)
+        self.send_and_read_to_prompt(prompt,"\n")
+        self.send_and_read_to_prompt(b'', message)
+        self.send_and_read_to_prompt(prompt,"\n")
+        self.send_and_read_to_prompt(b'', message)
+        self.send_and_read_to_prompt(prompt, "\n")
         self.send_and_read_to_prompt(prompt, login_name + '@local.host\n')
         self.send_string("q")
 
@@ -350,36 +385,43 @@ class NhClient:
 
 
 if __name__ == '__main__':
-    sampledata = b'\x1b[2;0z\x1b[2;1z\x1b[H\x1b[K\x1b[2;3z\x1b[2J\x1b[H\x1b[2;1z\x1b[2;3z\x1b[4;69H\x1b[0;832z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;833z-\x1b[1z\x1b[0m\x1b[5;69H\x1b[0;830z|\x1b[1z\x1b[0;848z\x1b[0m\x1b[1m\x1b[30m.\x1b[1z\x1b[0;16z\x1b[0m\x1b[1m\x1b[37m\x1b[7md\x1b[0m\x1b[0m\x1b[1z\x1b[0;848z\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[6;69H\x1b[0;830z|\x1b[1z\x1b[0;45z\x1b[0m\x1b[1m\x1b[37mh\x1b[1z\x1b[0;848z\x1b[0m\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[7;69H\x1b[0;844z\x1b[1m\x1b[31m+\x1b[1z\x1b[0;848z\x1b[0m\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[8;69H\x1b[0;830z|\x1b[1z\x1b[0;848z\x1b[0m\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[9;70H\x1b[0;848z\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[10;69H\x1b[0;830z|\x1b[1z\x1b[0;848z\x1b[0m\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[11;69H\x1b[0;834z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;835z-\x1b[1z\x1b[0m\x1b[6;70H\x1b[2;2z\x1b[23;1H\x1b[K[\x1b[7m\x08\x1b[1m\x1b[32m\x1b[CAa the Stripling\x1b[0m\x1b[0m\x1b[0m\r\x1b[23;18H]          St:18/02 Dx:14 Co:16 In:8 Wi:9 Ch:8  Lawful S:0\r\x1b[24;1HDlvl:1  $:0  HP:\x1b[K\r\x1b[1m\x1b[32m\x1b[24;17H18(18)\x1b[0m\r\x1b[24;23H Pw:\r\x1b[1m\x1b[32m\x1b[24;27H1(1)\x1b[0m\r\x1b[24;31H AC:6  Xp:1/0 T:1\x1b[2;1z\x1b[HVelkommen aa, the dwarven Valkyrie, welcome back to NetHack!\x1b[K\x1b[2;3z\x1b[6;70H\x1b[3z'
+    sampledata1 = b'\x1b[2;0z\x1b[2;1z\x1b[H\x1b[K\x1b[2;3z\x1b[2J\x1b[H\x1b[2;1z\x1b[2;3z\x1b[4;69H\x1b[0;832z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;833z-\x1b[1z\x1b[0m\x1b[5;69H\x1b[0;830z|\x1b[1z\x1b[0;848z\x1b[0m\x1b[1m\x1b[30m.\x1b[1z\x1b[0;16z\x1b[0m\x1b[1m\x1b[37m\x1b[7md\x1b[0m\x1b[0m\x1b[1z\x1b[0;848z\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[6;69H\x1b[0;830z|\x1b[1z\x1b[0;45z\x1b[0m\x1b[1m\x1b[37mh\x1b[1z\x1b[0;848z\x1b[0m\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[7;69H\x1b[0;844z\x1b[1m\x1b[31m+\x1b[1z\x1b[0;848z\x1b[0m\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[8;69H\x1b[0;830z|\x1b[1z\x1b[0;848z\x1b[0m\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[9;70H\x1b[0;848z\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[10;69H\x1b[0;830z|\x1b[1z\x1b[0;848z\x1b[0m\x1b[1m\x1b[30m.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;848z.\x1b[1z\x1b[0;830z\x1b[0m|\x1b[1z\x1b[0m\x1b[11;69H\x1b[0;834z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;831z-\x1b[1z\x1b[0;835z-\x1b[1z\x1b[0m\x1b[6;70H\x1b[2;2z\x1b[23;1H\x1b[K[\x1b[7m\x08\x1b[1m\x1b[32m\x1b[CAa the Stripling\x1b[0m\x1b[0m\x1b[0m\r\x1b[23;18H]          St:18/02 Dx:14 Co:16 In:8 Wi:9 Ch:8  Lawful S:0\r\x1b[24;1H'
+    sampledata2 = b'Dlvl:1  $:0  HP:\x1b[K\r\x1b[1m\x1b[32m\x1b[24;17H18(18)\x1b[0m\r\x1b[24;23H Pw:\r\x1b[1m\x1b[32m\x1b[24;27H1(1)\x1b[0m\r\x1b[24;31H AC:6  Xp:1/0 T:1\x1b[2;1z\x1b[HVelkommen aa, the dwarven Valkyrie, welcome back to NetHack!\x1b[K\x1b[2;3z\x1b[6;70H\x1b[3z'
+    sampledata = sampledata1 + sampledata2
+#%%
+    def smoke_test():
+        nhi = NhInterface()
+        nhi.start_session()
+        rgb = nhi.buffer_to_rgb()
+        plt.imshow(rgb)
+        plt.show()
+        nhi.send_string(".")
+        rgb = nhi.buffer_to_rgb()
+        plt.imshow(rgb)
+        plt.show()
 
 #%%
 
-    nhc = NhClient()
-    nhc.start_session()
-    rgb = nhc.buffer_to_rgb()
-    plt.imshow(rgb)
-    plt.show()
-    nhc.send_string(".")
-    rgb = nhc.buffer_to_rgb()
-    plt.imshow(rgb)
-    plt.show()
+    def create_logins(prefix, start, num):
+        log_format ='(%(threadName)-0s) %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+        logging.basicConfig(level=logging.INFO, format=log_format)
+        import concurrent
+        futures = []
+        envs = []
+        index = 0
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            for i in range(num):
+                name = "{}{:03}".format(prefix,i)
+                f = executor.submit(NhInterface, name)
+                futures.append(f)
+            for future in concurrent.futures.as_completed(futures, 120):
+                envs.append(future.result())
+
+            for i in range(num):
+                name = "{}{:03}".format(prefix,i+start)
+                f = executor.submit(envs[i]._create_login, name)
+            for future in concurrent.futures.as_completed(futures, 120):
+                print('{}:{}'.format(index,name), end= ", ")
+                index += 1
 
 
-
-#    nh.byte_stream.feed(b''.join(nh.nhdata.SAMPLE_DATA))
-
-#    nh.imshow_map()
-#    import png
-#    img = nh.render_glyphs()
-#    png.from_array(img.tolist(), 'RGB').save('map.png')
-#    npdata = nh.buffer_to_npdata()
-#%%
-def test_cursor():
-    nhc.send_command(6)
-    rgb1 = nhc.buffer_to_rgb()
-    nhc.send_command(4)
-    rgb2 = nhc.buffer_to_rgb()
-    plt.imshow(rgb1)
-    plt.show()
-    plt.imshow(rgb2)
-    plt.show()

@@ -7,7 +7,7 @@ Created on Fri Jan 19 15:30:17 2018
 Top level library to abstract Nethack for bots that follows AIGym conventions
 """
 
-from nh_interface import NhClient
+from nh_interface import NhInterface
 from nhstate import NhState
 from collections import namedtuple
 import numpy as np
@@ -36,26 +36,28 @@ class NhEnv():
     last_turn = 0
 
     def __init__(self, username='aa'):
-
-        self.nhc = NhClient(username)
-        self.actions = self.nhc.nhdata.get_commands(1)
+        if len(username) < 2:
+            raise ValueError("Usernames are at least 2 characters")
+        self.logger.info("starting user {}".format(username))
+        self.nhi = NhInterface(username)
+        self.actions = self.nhi.nhdata.get_commands(1)
         self.num_actions = len(self.actions)
-        self.nhstate = NhState(self.nhc)
-        self.nhc.send_string('\n')
-        self.nhc.start_session()
-        self.nhc._clear_more()
+        self.nhstate = NhState(self.nhi)
+        self.nhi.start_session()
+        self.nhi._clear_more()
 
     def __del__(self):
-        self.nhc.close()
+        if 'nhc' in dir(self):
+            self.nhi.close()
 
     def reset(self):
         """
         Start a new game
         """
-        self.logger.info("Reset " + self.nhc.username)
-        self.nhc.reset_game()
+        self.logger.info("Reset " + self.nhi.username)
+        self.nhi.reset_game()
         self.is_done = False
-        self.nhc._clear_more()
+        self.nhi._clear_more()
         return self.data()
 
 
@@ -72,11 +74,11 @@ class NhEnv():
     def step(self, action: int, strategy: int = 0):
         assert type(action) == int
         assert type(strategy) == int
-        self.nhc._clear_more()
+        self.nhi._clear_more()
         if self.is_done:
             raise ValueError("Simulation ended and must be reset")
-        self.last_status = self.nhc.get_status()
-        self.last_screen = self.nhc.buffer_to_rgb()
+        self.last_status = self.nhi.get_status()
+        self.last_screen = self.nhi.buffer_to_rgb()
         if self.strategies[strategy] == 'explore':
            self._do_exploration_move(action)
         else:
@@ -85,12 +87,12 @@ class NhEnv():
         self.is_done = self.nhstate.check_game_state()
 
         #s_, r, t, info
-        s_, info = self.data(), self.nhc.get_status()
+        s_, info = self.data(), self.nhi.get_status()
         r = self.score_move()
 
         turn = info['t']
 
-        self.logger.info("{} turn {}".format(self.nhc.username,turn))
+        self.logger.info("{} turn {}".format(self.nhi.username,turn))
         if int(turn) < 1 and not self.is_done:
             self.is_done = True
 
@@ -98,7 +100,7 @@ class NhEnv():
         return s_, r, t, info
 
     def score_move(self):
-        score = -1 #died/offset turn counter
+        score = -1 # died/offset turn counter
 
         score_kills = True
         score_hp = False
@@ -107,12 +109,12 @@ class NhEnv():
 
         if not self.is_done:
 
-            if self.nhc.is_killed_something and score_kills:
+            if self.nhi.is_killed_something and score_kills:
                 score = 1
 
             if score_exploration:
-                new_status = self.nhc.get_status()
-                new_screen = self.nhc.buffer_to_rgb()
+                new_status = self.nhi.get_status()
+                new_screen = self.nhi.buffer_to_rgb()
                 screen_diff = self.last_screen - new_screen
                 explore = len(screen_diff[screen_diff != 0])
                 score += explore / 50.0 # Scale the score to be approx 0-1
@@ -134,25 +136,25 @@ class NhEnv():
         return score
 
     def auxiliary_features(self):
-        return np.array(list(self.nhc.get_status().values()), dtype=np.float32)
+        return np.array(list(self.nhi.get_status().values()), dtype=np.float32)
 
     def _do_direct_action(self, action):
         if action >= self.num_actions:
             raise ValueError('No such action {}, limit is {}'.format(action, self.num_actions-1))
-        if action not in self.nhc.nhdata.MOVE_COMMANDS:
+        if action not in self.nhi.nhdata.MOVE_COMMANDS:
             action = 10 # wait
-        self.nhc.send_command(action)
+        self.nhi.send_command(action)
 
     def _do_exploration_move(self, action):
-        if action not in self.nhc.nhdata.MOVE_COMMANDS:
+        if action not in self.nhi.nhdata.MOVE_COMMANDS:
             # No op
             return
         else:
-           self.nhc.send_string("G")
-           self.nhc.send_string(str(action))
+           self.nhi.send_string("G")
+           self.nhi.send_string(str(action))
 
     def data(self):
-        return self.resize_state(self.nhc.buffer_to_rgb())
+        return self.resize_state(self.nhi.buffer_to_rgb())
 
 
     def resize_state(self, state):
@@ -161,10 +163,7 @@ class NhEnv():
         return a
 
     def close(self):
-        if self.nhc.is_game_screen:
-            self.nhc.send_string('S')
-            self.nhc.send_string('y')
-        self.nhc.close()
+        self.nhi.close()
 
 
     def random_agent(self, reps=1):
@@ -178,6 +177,21 @@ class NhEnv():
 
 if __name__ == '__main__':
 
+    log_format ='(%(threadName)-0s) %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+    logging.basicConfig(level=logging.WARNING, format=log_format)
 
     nhe = NhEnv()
-    print("\n".join(nhe.nhc.screen.display))
+    print("\n".join(nhe.nhi.screen.display))
+
+#%%
+    def test_step_function(env, num):
+        callback = lambda x:(np.random.randint(10),0)
+        if env.is_done:
+            env.reset()
+
+        for i in range(num):
+            env.step_with_callback(callback)
+
+    #%prun test_step_function(nhe, 100)
+
+

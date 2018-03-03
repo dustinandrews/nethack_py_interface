@@ -29,13 +29,20 @@ class RoomTiles():
 
     # Things to treat collapse into architypes
     GLYPH_COLLECTIONS = [WALL_GLYPHS, FLOOR_GLYPHS, DOOR_GLYPHS_OPENED,
-                         DOOR_GLYPHS_CLOSED, UP_GLYPHS, DOWN_GLYPHS]
+                         DOOR_GLYPHS_CLOSED, UP_GLYPHS, DOWN_GLYPHS,
+                         DB_LOWERED, DB_RAISED
+                         ]
 
     _min_trap = 870
     _max_trap = 892
     _swallow = [i for i in range(905, 921)]
 
     def __init__(self, glyphs):
+        self.gsets = {l: set(self.GLYPH_COLLECTIONS[l][1:]) for l in range(len(self.GLYPH_COLLECTIONS))}
+        self.glyph_map = []
+        for i in range(2000):
+            self.glyph_map.append(self._collapse_glyph(i))
+
         room_keys = np.array([k for k in glyphs if glyphs[k]['type'] == 'room'], dtype=np.int)
         self.minkey = room_keys.min()
         self.maxkey = np.max(list(glyphs.keys()))
@@ -46,14 +53,22 @@ class RoomTiles():
 
 
 
+
     def collapse_glyph(self, glyph):
+        """
+        use lookup table, this gets called often.
+        """
+        return self.glyph_map[glyph]
+
+
+    def _collapse_glyph(self, glyph):
         """
         Converts equivalent classes of glyphs to the first of the type
         For example all walls are converted to just one wall
         """
-        for glist in self.GLYPH_COLLECTIONS:
-            if glyph in glist:
-                glyph = glist[0]
+        for i in range(len(self.GLYPH_COLLECTIONS)):
+            if glyph in self.gsets[i]:
+                glyph = self.GLYPH_COLLECTIONS[i][0]
         return glyph
 
     def _normalize_room_data(self, room_keys, trap_keys):
