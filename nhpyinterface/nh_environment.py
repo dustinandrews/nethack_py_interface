@@ -87,10 +87,10 @@ class NhEnv():
         self.is_done = self.nhstate.check_game_state()
 
         #s_, r, t, info
-        s_, info = self.data(), self.nhi.get_status()
+        s_, info = self.data(),  self.get_info()
         r = self.score_move()
 
-        turn = info['t']
+        turn = self.nhi.get_status()['t']
 
         self.logger.info("{} turn {}".format(self.nhi.username,turn))
         if int(turn) < 1 and not self.is_done:
@@ -98,6 +98,12 @@ class NhEnv():
 
         t = self.is_done
         return s_, r, t, info
+
+    def get_info(self):
+        #info = self.data(), self.nhi.get_status()
+        x_ = self.nhi.screen.cursor.x / self.nhi.screen.columns
+        y_ = self.nhi.screen.cursor.y / self.nhi.screen.lines
+        return [x_, y_]
 
     def score_move(self):
         score = -1 # died/offset turn counter
@@ -136,7 +142,7 @@ class NhEnv():
         return score
 
     def auxiliary_features(self):
-        return np.array(list(self.nhi.get_status().values()), dtype=np.float32)
+        return self.get_info()
 
     def _do_direct_action(self, action):
         if action >= self.num_actions:

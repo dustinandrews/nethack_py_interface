@@ -6,8 +6,6 @@ Created on Mon Jan  8 17:00:26 2018
 
 With inspiration from the lmj nethack client https://github.com/lmjohns3/shrieker
 """
-import sys
-sys.path.append('d:/local/pyte')
 from pyte import Screen, ByteStream
 import telnetlib
 #from sprites import SpriteSheet
@@ -67,15 +65,16 @@ class NhInterface:
     is_fainted             = False
     is_call_prompt         = False
 
-    _special_prompts = ['end', 'more', 'question', 'count',
+    _special_prompts = ['end', 'more', 'always_yes_question',
+                        'always_no_question', 'count',
                         'call_prompt', 'throw_prompt',
                         'entry_problem'
                         ]
 
 
     _states = {
-        'always_yes_question': ['Force its termination? [yn]', 'Really save?'],
-        'always_no_question':['Still climb?' , 're you sure?', 'Really quit?' 'Really attack'],
+        'always_yes_question': ['Force its termination? [yn]', 'Really save?',],
+        'always_no_question':['who are you?', 'Still climb?' , 're you sure?', 'Really quit?', 'Really attack'],
         'killed':['killed by', 'Voluntary challenges'],
         'end':['(end)'],
         'stale':['stale'],
@@ -167,7 +166,8 @@ class NhInterface:
     def _clear_more(self):
         self._read_states()
         while self.is_end or self.is_more\
-            or self.is_blank or self.is_call_prompt:
+            or self.is_blank or self.is_call_prompt\
+            or self.is_entry_problem:
             self.logger.debug('clearing prompts')
             self.send_and_read_to_prompt(self._more_prompt, b'\n')
 
@@ -331,7 +331,9 @@ class NhInterface:
                 self.is_blank = False
                 break
         if self.is_game_screen and self.screen.cursor.y == 0 and not self.is_special_prompt:
-            raise ValueError("Unexpected prompt")
+            raise ValueError("Unexpected prompt {}".format(self.screen.display[0]))
+
+
 
 
     def _get_states(self):
@@ -399,6 +401,9 @@ if __name__ == '__main__':
         rgb = nhi.buffer_to_rgb()
         plt.imshow(rgb)
         plt.show()
+        return nhi
+
+    nhi = smoke_test()
 
 #%%
 
