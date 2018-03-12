@@ -21,7 +21,7 @@ class NhData():
     # Rating: subjective assesment of how hard the command is to use
     Command = collections.namedtuple('command', 'name command rating')
 
-    MOVE_COMMANDS = [1,2,3,4,6,7,8,9] # No up/down
+    MOVE_COMMANDS = [1,2,3,4,5,6,7,8,9] # No up/down
 
     COMMANDS = {
         0: Command ('DOWN', '>', 1 ),

@@ -79,6 +79,9 @@ class NhEnv():
             raise ValueError("Simulation ended and must be reset")
         self.last_status = self.nhi.get_status()
         self.last_screen = self.nhi.buffer_to_rgb()
+
+        start_turn = self.nhi.get_status()['t']
+
         if self.strategies[strategy] == 'explore':
            self._do_exploration_move(action)
         else:
@@ -89,9 +92,12 @@ class NhEnv():
         #s_, r, t, info
         s_, info = self.data(),  self.get_info()
         r = self.score_move()
-
         turn = self.nhi.get_status()['t']
 
+        # turn no-ops like wall bumps into a "search" action
+        if turn == start_turn:
+            self._do_direct_action(5)
+            turn = self.nhi.get_status()['t']
         self.logger.info("{} turn {}".format(self.nhi.username,turn))
         if int(turn) < 1 and not self.is_done:
             self.is_done = True
@@ -106,9 +112,10 @@ class NhEnv():
         return [x_, y_]
 
     def score_move(self):
-        score = -1 # died/offset turn counter
+        #score = -1 # died/offset turn counter
+        score = 0
 
-        score_kills = True
+        score_kills = False
         score_hp = False
         score_exploration = True
         score_status = False

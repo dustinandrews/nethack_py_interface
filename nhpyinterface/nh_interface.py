@@ -269,8 +269,8 @@ class NhInterface:
         rgb[:,:,2] = g
 
         # cursor axis are flipped v.s. image or I made more x,y mistakes
-        if self.screen.cursor.y - 1< self.map_x_y.x and self.screen.cursor.x < self.map_x_y.y:
-            rgb[self.screen.cursor.y - 1, self.screen.cursor.x, :] = 1 # highlight player.
+        if self.screen.cursor.y < self.map_x_y.x and self.screen.cursor.x < self.map_x_y.y:
+            rgb[self.screen.cursor.y, self.screen.cursor.x, :] = 1 # highlight player.
 
         return rgb
 
